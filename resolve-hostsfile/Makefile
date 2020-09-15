@@ -1,4 +1,4 @@
-OUTPUT := resolve-hostfile
+OUTPUT := resolve-hostsfile
 
 PREFIX ?= /usr/local
 

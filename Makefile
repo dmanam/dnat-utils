@@ -1,5 +1,5 @@
 TARGETS := all debug install clean
-PROGRAMS := dyndnat nfq-unit-start resolve-hostfile
+PROGRAMS := dyndnat nfq-unit-start resolve-hostsfile
 
 $(TARGETS): $(PROGRAMS)
 
