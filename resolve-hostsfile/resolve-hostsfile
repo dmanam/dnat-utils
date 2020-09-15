@@ -15,8 +15,7 @@ with open(sys.argv[1], 'r') as inf:
         row = line.split()
         keys.append(row[0])
         lines[row[0]] = [entry[-1][0] for entry in
-                reversed(socket.getaddrinfo(row[1], None,
-                    family=socket.AF_INET, type=socket.SOCK_DGRAM))]
+                socket.getaddrinfo(row[1], None, family=socket.AF_INET, type=socket.SOCK_DGRAM)]
 
 def sortfn(ip_str):
     ip = socket.inet_aton(ip_str)
