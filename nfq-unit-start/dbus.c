@@ -59,7 +59,10 @@ static void dbus_update_state(char *state) {
     }
 
     fprintf(stderr, "%s %s\n", unit_name, state);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
     strncpy(last_state, state, sizeof(last_state));
+#pragma GCC diagnostic pop
 
     if (strcmp(state, "active") == 0) {
         b_state = true;
