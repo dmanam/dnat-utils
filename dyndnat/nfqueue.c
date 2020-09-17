@@ -18,7 +18,6 @@
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
 #include "conntrack.h"
-#include "rtnl.h"
 
 static struct mnl_socket *nl;
 
@@ -45,12 +44,10 @@ static void nfq_send_verdict(int queue_num, uint32_t id)
     nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
     nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
 
-    rtnl_lock();
     if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
         perror("nfq_send_verdict: mnl_socket_sendto");
         exit(EXIT_FAILURE);
     }
-    rtnl_unlock();
 }
 
 static int queue_cb(const struct nlmsghdr *nlh, void *data)

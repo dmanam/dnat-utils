@@ -8,7 +8,6 @@
 #include <sys/inotify.h>
 
 #include "nat_table.h"
-#include "rtnl.h"
 
 void in_watch(char *fp) {
     int fd, wd;
@@ -45,6 +44,5 @@ void in_watch(char *fp) {
             }
         }
         nt_read(fp);
-        rtnl_update();
     }
 }

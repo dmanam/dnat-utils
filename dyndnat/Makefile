@@ -3,8 +3,7 @@ SOURCES := \
 	conntrack.c \
 	inotify.c \
 	nat_table.c \
-	nfqueue.c \
-	rtnl.c
+	nfqueue.c
 
 LIBS := -pthread -lmnl -lnetfilter_conntrack -lnetfilter_queue
 

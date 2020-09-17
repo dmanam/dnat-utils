@@ -5,7 +5,6 @@
 #include "inotify.h"
 #include "nat_table.h"
 #include "nfqueue.h"
-#include "rtnl.h"
 
 void *nfq_loop_wrapper(void *queue_num) {
     nfq_loop(*((unsigned int *) queue_num));
@@ -13,18 +12,11 @@ void *nfq_loop_wrapper(void *queue_num) {
 }
 
 int main(int argc, char **argv) {
-    unsigned int queue_num, rtid;
+    unsigned int queue_num;
     pthread_t nfq_thread;
     char *endptr = NULL;
 
-    if (argc == 5) {
-        endptr = NULL;
-        rtid = (unsigned int) strtoul(argv[3], &endptr, 10);
-        if (argv[3][0] == '\0' || *endptr != '\0') {
-            goto usage;
-        }
-        rtnl_init(rtid, argv[4]);
-    } else if (argc != 3) {
+    if (argc != 3) {
         goto usage;
     }
 
@@ -36,8 +28,6 @@ int main(int argc, char **argv) {
 
     nt_read(argv[2]);
 
-    rtnl_update();
-
     pthread_create(&nfq_thread, NULL, nfq_loop_wrapper, &queue_num);
 
     in_watch(argv[2]);
@@ -45,6 +35,6 @@ int main(int argc, char **argv) {
     exit(EXIT_SUCCESS);
 
 usage:
-    fprintf(stderr, "usage: %s queue_num /path/to/csv [routing_table_id interface]\n", argv[0]);
+    fprintf(stderr, "usage: %s queue_num /path/to/csv\n", argv[0]);
     exit(EXIT_FAILURE);
 }

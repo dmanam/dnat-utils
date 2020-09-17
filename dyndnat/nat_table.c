@@ -12,16 +12,6 @@ static uint16_t *bins = NULL;
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void nt_vals_iter(const in_addr_t **ret_vals, uint16_t *ret_len) {
-    pthread_mutex_lock(&mutex);
-    *ret_vals = vals;
-    *ret_len = bins[257];
-}
-
-void nt_vals_iter_end(void) {
-    pthread_mutex_unlock(&mutex);
-}
-
 int nt_read(char *fp) {
     FILE* file;
     uint32_t *old_keys = keys, *new_keys = NULL, *tmp_keys = NULL;
@@ -73,23 +63,26 @@ int nt_read(char *fp) {
                 ++line_idx;
             } else {
                 uint32_t addr = ntohl(addr_raw);
-                uint16_t insert_idx = line_idx;
+                uint16_t insert_idx = line_idx, idx;
+                tmp_keys[line_idx] = addr;
                 for (; insert_idx > 0; --insert_idx) {
-                    uint16_t idx = sorted_order[insert_idx-1];
+                    idx = sorted_order[insert_idx-1];
                     int16_t cmp = (addr % 256) - (tmp_keys[idx] % 256);
                     if (cmp > 0 || (cmp == 0 && addr >= tmp_keys[idx])) {
-                        if (addr == tmp_keys[idx]) {
-                            addr = (uint32_t) -1;
-                            insert_idx = line_idx;
-                        }
                         break;
                     }
                 }
-                tmp_keys[line_idx] = addr;
-                for (uint16_t i = line_idx; i > insert_idx; --i) {
-                    sorted_order[i] = sorted_order[i-1];
+                if (line_idx > 0 && addr == tmp_keys[idx]) {
+                    tmp_keys[idx] = (uint32_t) -1;
+                    sorted_order[insert_idx-1] = line_idx;
+                    sorted_order[line_idx] = idx;
+                    --nlines;
+                } else {
+                    for (uint16_t i = line_idx; i > insert_idx; --i) {
+                        sorted_order[i] = sorted_order[i-1];
+                    }
+                    sorted_order[insert_idx] = line_idx;
                 }
-                sorted_order[insert_idx] = line_idx;
             }
 
             buf_idx = 0;
@@ -105,13 +98,10 @@ int nt_read(char *fp) {
         perror("nt_read: getc");
         goto nt_read_failure;
     }
-    if (nlines != line_idx) {
-        goto nt_read_parse_failure;
-    }
 
     new_keys = malloc(nlines * sizeof(in_addr_t));
     new_vals = malloc(nlines * sizeof(in_addr_t));
-    new_bins = malloc(258 * sizeof(uint16_t));
+    new_bins = malloc(257 * sizeof(uint16_t));
     if (!new_keys || !new_vals || !new_bins) {
         perror("nt_read: malloc");
         goto nt_read_failure;
@@ -128,19 +118,12 @@ int nt_read(char *fp) {
             in_addr_t n_new_key = ntohl(new_keys[i]);
             inet_ntop(AF_INET,   &n_new_key, s_key, 16);
             inet_ntop(AF_INET, &new_vals[i], s_val, 16);
-            if (new_keys[i] != (uint32_t) -1) {
-                fprintf(stderr, "  mapping %s to %s\n", s_key, s_val);
-                for (; next_bin <= tmp_keys[idx] % 256; ++next_bin) {
-                    new_bins[next_bin] = i;
-                }
-            } else {
-                fprintf(stderr, "  routing %s\n", s_val);
-                for (; next_bin <= 257; ++next_bin) {
-                    new_bins[next_bin] = i;
-                }
+            fprintf(stderr, "  mapping %s to %s\n", s_key, s_val);
+            for (; next_bin <= tmp_keys[idx] % 256; ++next_bin) {
+                new_bins[next_bin] = i;
             }
         }
-        for (; next_bin <= 257; ++next_bin) {
+        for (; next_bin <= 256; ++next_bin) {
             new_bins[next_bin] = nlines;
         }
     }
