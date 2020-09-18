@@ -102,7 +102,7 @@ int nfct_add(uint8_t *pkt) {
                 s_sport[0] = s_dport[0] = '\0';
                 break;
         }
-        fprintf(stderr, "adding %s connection from %s%s to %s%s with DNAT to %s\n", s_proto, s_saddr, s_sport, s_daddr, s_dport, s_naddr);
+        fprintf(stderr, "%s connection from %s%s to %s%s via %s\n", s_proto, s_saddr, s_sport, s_naddr, s_dport, s_daddr);
 
         ret = nfct_query(handle, NFCT_Q_CREATE, ct);
         if (ret == -1) {
