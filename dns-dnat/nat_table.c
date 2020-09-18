@@ -47,6 +47,7 @@ static void _nt_add(in_addr_t key, in_addr_t val, bool lock) {
     uint16_t idx;
     uint8_t bin = HASH(key);
     char s_key[16], s_val[16];
+    int32_t val_startidx = total_len;
 
     inet_ntop(AF_INET, &key, s_key, 16);
     inet_ntop(AF_INET, &val, s_val, 16);
@@ -65,13 +66,12 @@ static void _nt_add(in_addr_t key, in_addr_t val, bool lock) {
     }
 
     idx = 0;
-    {
+    if (bin_len[bin] > 0) {
         int32_t l = 0, r = bin_len[bin] - 1;
         while (l <= r) {
             idx = (l + r) / 2;
             if (keys[bin][idx] == key) {
-                vals[bin][idx] = val;
-                goto val_sort;
+                goto val_find_startpos;
             } else if (keys[bin][idx] < key) {
                 l = idx + 1;
             } else {
@@ -88,10 +88,9 @@ static void _nt_add(in_addr_t key, in_addr_t val, bool lock) {
         vals[bin][i] = vals[bin][i-1];
     }
 
-    keys[bin][idx] = key;
-    vals[bin][idx] = val;
-
-val_sort:
+    ++total_len;
+    ++bin_len[bin];
+    --bin_space[bin];
 
     if (val_space == 0) {
         val_sort = realloc(val_sort, (total_len + 32) * sizeof(struct index));
@@ -99,12 +98,54 @@ val_sort:
             perror("nt_add: realloc");
             exit(EXIT_FAILURE);
         }
-        val_space = 31;
+        val_space = 32;
     }
 
-    uint32_t val_idx = 0;
-    if (total_len > 0) {
-        int32_t l = 0, r = total_len - 1;
+    goto val_sort;
+
+val_find_startpos:
+
+    {
+        int32_t l = 0, r = total_len - 1, diff = 0;
+        struct index vi = {0, 0};
+        while (l <= r) {
+            val_startidx = (l + r) / 2;
+            vi = val_sort[val_startidx];
+            if (vals[vi.bin][vi.idx] == vals[bin][idx]) {
+                break;
+            } else if (vals[vi.bin][vi.idx] < vals[bin][idx]) {
+                l = val_startidx + 1;
+            } else {
+                r = val_startidx - 1;
+            }
+        }
+        while (vals[vi.bin][vi.idx] == vals[bin][idx]) {
+            if (vi.bin == bin && vi.idx == idx) {
+                val_startidx += diff;
+                goto val_sort;
+            }
+            --diff;
+            vi = val_sort[val_startidx + diff];
+        }
+        diff = 1;
+        while (vals[vi.bin][vi.idx] == vals[bin][idx]) {
+            if (vi.bin == bin && vi.idx == idx) {
+                val_startidx += diff;
+                goto val_sort;
+            }
+            ++diff;
+            vi = val_sort[val_startidx + diff];
+        }
+        fprintf(stderr, "NAT table is in a state that shouldn't be possible\n");
+        exit(EXIT_FAILURE);
+    }
+
+val_sort:
+
+    (void) 0;
+    int32_t val_idx = 0;
+    if (total_len > 1) {
+        int32_t l = 0, r = total_len - 2;
         struct index vi = {0, 0};
         while (l <= r) {
             val_idx = (l + r) / 2;
@@ -120,15 +161,19 @@ val_sort:
         }
     }
 
-    for (uint32_t i = total_len; i > val_idx; --i) {
-        val_sort[i] = val_sort[i-1];
+    if (val_idx < val_startidx) {
+        for (int32_t i = val_startidx; i > val_idx; --i) {
+            val_sort[i] = val_sort[i-1];
+        }
+    } else {
+        for (int32_t i = val_startidx; i < val_idx; ++i) {
+            val_sort[i] = val_sort[i+1];
+        }
     }
 
+    keys[bin][idx] = key;
+    vals[bin][idx] = val;
     val_sort[val_idx] = (struct index){bin, idx};
-
-    ++total_len;
-    ++bin_len[bin];
-    --bin_space[bin];
 
     if (lock) pthread_mutex_unlock(&mutex);
 }
