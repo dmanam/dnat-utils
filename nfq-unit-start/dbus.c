@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <errno.h>
+#include <time.h>
 #include <pthread.h>
 
 #include <systemd/sd-bus.h>
@@ -15,38 +16,40 @@ static bool active = false;
 static char last_state[16] = {0};
 
 void dbus_await(void) {
-    pthread_mutex_lock(&mutex);
-    if (active) {
-        pthread_mutex_unlock(&mutex);
-        return;
-    }
-    pthread_mutex_unlock(&mutex);
+    int ret;
+    sd_bus *bus;
+    sd_bus_error err = SD_BUS_ERROR_NULL;
+    sd_bus_message *msg;
+    struct timespec timeout;
 
     if (!unit_name) {
         fprintf(stderr, "error: dbus_await called before dbus_init");
         exit(EXIT_FAILURE);
     }
 
-    int ret;
-    sd_bus *bus;
-    sd_bus_error err = SD_BUS_ERROR_NULL;
-    sd_bus_message *msg;
-
-    fprintf(stderr, "starting %s...\n", unit_name);
-
-    sd_bus_default_system(&bus);
-    ret = sd_bus_call_method(bus, "org.freedesktop.systemd1", "/org/freedesktop/systemd1", \
-        "org.freedesktop.systemd1.Manager", "StartUnit", &err, &msg, "ss", unit_name, "replace");
-    if (ret < 0) {
-        fprintf(stderr, "org.freedesktop.systemd1.Manager.StartUnit: %s\n", err.message);
-        exit(EXIT_FAILURE);
-    }
-    sd_bus_message_unref(msg);
-    sd_bus_unref(bus);
-
     pthread_mutex_lock(&mutex);
     while (!active) {
-        pthread_cond_wait(&activated, &mutex);
+        pthread_mutex_unlock(&mutex);
+
+        fprintf(stderr, "starting %s...\n", unit_name);
+
+        sd_bus_default_system(&bus);
+        ret = sd_bus_call_method(bus, "org.freedesktop.systemd1", "/org/freedesktop/systemd1", \
+            "org.freedesktop.systemd1.Manager", "StartUnit", &err, &msg, "ss", unit_name, "replace");
+        if (ret < 0) {
+            fprintf(stderr, "org.freedesktop.systemd1.Manager.StartUnit: %s\n", err.message);
+            exit(EXIT_FAILURE);
+        }
+        sd_bus_message_unref(msg);
+        sd_bus_unref(bus);
+
+        pthread_mutex_lock(&mutex);
+        clock_gettime(CLOCK_REALTIME, &timeout);
+        timeout.tv_sec += 30;
+        pthread_cond_timedwait(&activated, &mutex, &timeout);
+        if (!active) {
+            fprintf(stderr, "timed out\n");
+        }
     }
     pthread_mutex_unlock(&mutex);
 }
