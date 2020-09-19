@@ -33,7 +33,7 @@ union l4hdr {
     struct icmphdr icmp;
 };
 
-int nfct_add(uint8_t *pkt) {
+in_addr_t nfct_add(uint8_t *pkt) {
     int ret;
     struct nf_conntrack *ct;
 
@@ -112,5 +112,7 @@ int nfct_add(uint8_t *pkt) {
 
     nfct_destroy(ct);
 
-    return ret;
+    if (ret == -1) return (in_addr_t) ret;
+
+    return new_daddr;
 }

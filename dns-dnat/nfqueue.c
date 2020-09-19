@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
@@ -13,9 +14,12 @@
 #include <linux/netfilter/nfnetlink.h>
 
 #include <linux/types.h>
+#include <linux/ip.h>
 #include <linux/netfilter/nfnetlink_queue.h>
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
+#include <libnetfilter_queue/libnetfilter_queue_ipv4.h>
+#include <libnetfilter_queue/pktbuff.h>
 
 #include "conntrack.h"
 
@@ -36,13 +40,17 @@ nfq_nlmsg_put(char *buf, int type, uint32_t queue_num)
     return nlh;
 }
 
-static void nfq_send_verdict(int queue_num, uint32_t id)
+static void nfq_send_verdict(int queue_num, uint32_t id, uint32_t mark, struct pkt_buff *pktb)
 {
     char buf[MNL_SOCKET_BUFFER_SIZE];
     struct nlmsghdr *nlh;
 
     nlh = nfq_nlmsg_put(buf, NFQNL_MSG_VERDICT, queue_num);
     nfq_nlmsg_verdict_put(nlh, id, NF_ACCEPT);
+    nfq_nlmsg_verdict_put_mark(nlh, mark);
+    if (pktb_mangled(pktb)) {
+        nfq_nlmsg_verdict_put_pkt(nlh, pktb_data(pktb), pktb_len(pktb));
+    }
 
     if (mnl_socket_sendto(nl, nlh, nlh->nlmsg_len) < 0) {
         perror("nfq_send_verdict: mnl_socket_sendto");
@@ -50,13 +58,17 @@ static void nfq_send_verdict(int queue_num, uint32_t id)
     }
 }
 
-static int queue_cb(const struct nlmsghdr *nlh, void *data)
+static int queue_cb(const struct nlmsghdr *nlh, void *fwmark_ptr)
 {
     uint8_t *payload;
     struct nfqnl_msg_packet_hdr *ph = NULL;
     struct nlattr *attr[NFQA_MAX+1] = {};
     uint32_t id = 0;
     struct nfgenmsg *nfg;
+    in_addr_t new_daddr;
+    struct pkt_buff *pktb;
+    uint16_t plen;
+    uint32_t fwmark = *((uint32_t *) fwmark_ptr);
 
     if (nfq_nlmsg_parse(nlh, attr) < 0) {
         perror("nfq_nlmsg_parse");
@@ -70,13 +82,23 @@ static int queue_cb(const struct nlmsghdr *nlh, void *data)
         return MNL_CB_ERROR;
     }
 
+    plen = mnl_attr_get_payload_len(attr[NFQA_PAYLOAD]);
     payload = mnl_attr_get_payload(attr[NFQA_PAYLOAD]);
-    nfct_add(payload);
+
+    new_daddr = nfct_add(payload);
+
+    pktb = pktb_alloc(AF_INET, payload, plen, 0);
+
+    if (new_daddr != (in_addr_t) -1) {
+        nfq_ip_mangle(pktb, 0, offsetof(struct iphdr, daddr), sizeof(in_addr_t), (char *) &new_daddr, sizeof(in_addr_t));
+    }
 
     ph = mnl_attr_get_payload(attr[NFQA_PACKET_HDR]);
     id = ntohl(ph->packet_id);
 
-    nfq_send_verdict(ntohs(nfg->res_id), id);
+    nfq_send_verdict(ntohs(nfg->res_id), id, fwmark, pktb);
+
+    free(pktb);
 
     return MNL_CB_OK;
 }
@@ -86,7 +108,7 @@ void nfq_cleanup(void) {
     mnl_socket_close(nl);
 }
 
-int nfq_loop(unsigned int queue_num)
+int nfq_loop(unsigned int queue_num, unsigned int fwmark)
 {
     char *buf;
     /* largest possible packet payload, plus netlink data overhead: */
@@ -151,7 +173,7 @@ int nfq_loop(unsigned int queue_num)
             exit(EXIT_FAILURE);
         }
 
-        ret = mnl_cb_run(buf, ret, 0, portid, queue_cb, NULL);
+        ret = mnl_cb_run(buf, ret, 0, portid, queue_cb, &fwmark);
         if (ret < 0) {
             perror("mnl_cb_run");
             exit(EXIT_FAILURE);
