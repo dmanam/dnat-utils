@@ -1,4 +1,4 @@
-{ stdenv, libmnl, libnetfilter_queue, libnetfilter_conntrack, systemd, python3 }:
+{ stdenv, fetchFromGitHub, libmnl, libnetfilter_queue, libnetfilter_conntrack, libevent, udns, systemd, python3 }:
 
 stdenv.mkDerivation rec {
     pname = "dnat-utils";
@@ -6,7 +6,7 @@ stdenv.mkDerivation rec {
 
     src = ./.;
 
-    buildInputs = [ libmnl libnetfilter_queue libnetfilter_conntrack systemd python3 ];
+    buildInputs = [ libmnl libnetfilter_queue libnetfilter_conntrack libevent udns systemd python3 ];
 
     makeFlags = [ "PREFIX=$(out)" ];
 
