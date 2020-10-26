@@ -21,21 +21,6 @@
 
 static struct mnl_socket *nl;
 
-static struct nlmsghdr *
-nfq_nlmsg_put(char *buf, int type, uint32_t queue_num)
-{
-    struct nlmsghdr *nlh = mnl_nlmsg_put_header(buf);
-    nlh->nlmsg_type = (NFNL_SUBSYS_QUEUE << 8) | type;
-    nlh->nlmsg_flags = NLM_F_REQUEST;
-
-    struct nfgenmsg *nfg = mnl_nlmsg_put_extra_header(nlh, sizeof(*nfg));
-    nfg->nfgen_family = AF_UNSPEC;
-    nfg->version = NFNETLINK_V0;
-    nfg->res_id = htons(queue_num);
-
-    return nlh;
-}
-
 static void nfq_send_verdict(int queue_num, uint32_t id)
 {
     char buf[MNL_SOCKET_BUFFER_SIZE];
